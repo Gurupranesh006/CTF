@@ -169,7 +169,7 @@ export default function Dashboard() {
                 <div key={c.id} className="card hover-glow" style={c.solved ? { borderColor: "var(--text-color)", boxShadow: "0 0 10px rgba(51,255,51,0.2)" } : {}}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
                     <h3 style={{ margin: 0 }}>{c.title}</h3>
-                    <span className="badge badge-active">{c.points} pts · {c.difficulty || "Hard"}</span>
+                    <span className="badge badge-active">{c.points} pts</span>
                   </div>
                   <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "1rem" }}>
                     <span className="badge badge-inactive">{c.category || "Web Security"}</span>
