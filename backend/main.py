@@ -16,7 +16,10 @@ from database import init_db, get_db
 from seed_challenges import seed_challenges
 
 app = FastAPI()
-cors_origins = [origin.strip() for origin in os.getenv("CORS_ALLOWED_ORIGINS", "*").split(",") if origin.strip()]
+# Keep the current Vercel frontend usable even if an older Render environment
+# value still lists a previous frontend deployment URL.
+cors_origins = [origin.strip() for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if origin.strip()]
+cors_origins = list(dict.fromkeys([*cors_origins, "https://ctf-sooty.vercel.app", "http://localhost:3000"]))
 
 app.add_middleware(
     CORSMiddleware,
@@ -335,10 +338,9 @@ def update_challenge(challenge_id: int, req: ChallengeUpdate, _: dict = Depends(
 def delete_challenge(challenge_id: int, _: dict = Depends(get_admin_user)):
     with get_db() as db:
         cursor = db.cursor()
-        cursor.execute("SELECT is_active FROM contest WHERE id = 1")
-        if cursor.fetchone()["is_active"]:
-            raise HTTPException(status_code=400, detail="Cannot delete challenges while contest is active")
         cursor.execute("DELETE FROM challenge WHERE id = ?", (challenge_id,))
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Challenge not found")
         db.commit()
         return {"message": "Challenge deleted"}
 

@@ -9,6 +9,12 @@ const targetUrl = (envName, port, route) => {
   if (process.env.RENDER) throw new Error(`${envName} must be set to the deployed challenge URL on Render`);
   return `${targetBase}:${port}${route}`;
 };
+const challengeFlag = (envName, localFallback) => {
+  const configured = process.env[envName];
+  if (configured) return configured;
+  if (process.env.RENDER) throw new Error(`${envName} must be configured on Render; refusing a public fallback flag`);
+  return localFallback;
+};
 
 for (const [name, definition] of [
   ["category", "TEXT NOT NULL DEFAULT 'web'"],
@@ -30,7 +36,7 @@ const challenges = [
     difficulty: "Hard",
     points: 300,
     target_url: targetUrl("PROFILE_URL", 4101, "/api/v2/docs"),
-    flag: process.env.PROFILE_FLAG || "flag{mass_assignment_crosses_the_trust_boundary}",
+    flag: challengeFlag("PROFILE_FLAG", "flag{mass_assignment_crosses_the_trust_boundary}"),
     description: "Review a profile change request and complete the restricted export workflow.",
   },
   {
@@ -39,7 +45,7 @@ const challenges = [
     difficulty: "Hard",
     points: 325,
     target_url: targetUrl("LEDGER_URL", 4102, "/api/v1/docs"),
-    flag: process.env.LEDGER_FLAG || "flag{tenant_isolation_is_an_authorization_check}",
+    flag: challengeFlag("LEDGER_FLAG", "flag{tenant_isolation_is_an_authorization_check}"),
     description: "Investigate a partner ledger discrepancy and retrieve the associated finance record.",
   },
   {
@@ -48,7 +54,7 @@ const challenges = [
     difficulty: "Hard",
     points: 350,
     target_url: targetUrl("HOOKRELAY_URL", 4103, "/api/v1/docs"),
-    flag: process.env.HOOKRELAY_FLAG || "flag{redirects_and_dns_are_part_of_ssrf_defense}",
+    flag: challengeFlag("HOOKRELAY_FLAG", "flag{redirects_and_dns_are_part_of_ssrf_defense}"),
     description: "Inspect a webhook delivery report and retrieve the incident status.",
   },
   {
@@ -57,7 +63,7 @@ const challenges = [
     difficulty: "Hard",
     points: 375,
     target_url: targetUrl("TOKENFORGE_URL", 4104, "/api/v1/docs"),
-    flag: process.env.TOKENFORGE_FLAG || "flag{never_trust_the_token_header_for_authorization}",
+    flag: challengeFlag("TOKENFORGE_FLAG", "flag{never_trust_the_token_header_for_authorization}"),
     description: "Review a partner sign-in issue and access the protected export.",
   },
   {
@@ -66,7 +72,7 @@ const challenges = [
     difficulty: "Very Hard",
     points: 500,
     target_url: targetUrl("CIPHERWORKS_URL", 4105, "/api/v1/crypto/brief"),
-    flag: process.env.CIPHERWORKS_FLAG || "flag{ecdsa_nonce_reuse_breaks_signing_keys}",
+    flag: challengeFlag("CIPHERWORKS_FLAG", "flag{ecdsa_nonce_reuse_breaks_signing_keys}"),
     description: "Audit the incident signing records and complete the pending approval.",
   },
 ];
