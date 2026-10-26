@@ -11,7 +11,6 @@ type Challenge = {
   description: string;
   points: number;
   category: string;
-  difficulty: string;
   target_url: string;
   solved?: boolean;
 };
@@ -232,7 +231,7 @@ export default function ChallengeWorkspace() {
           <header className="card" style={{ marginBottom: "1.25rem" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", marginBottom: "1rem" }}>
               <span className="badge badge-inactive">{challenge.category}</span>
-              <span className="badge badge-active">{challenge.difficulty} · {challenge.points} pts</span>
+              <span className="badge badge-active">{challenge.points} pts</span>
             </div>
             <h1 style={{ fontSize: "clamp(1.5rem, 4vw, 2.5rem)", marginBottom: "1rem" }}>{challenge.title}</h1>
             <p style={{ maxWidth: 820, fontSize: "1.02rem" }}>{challenge.description}</p>
