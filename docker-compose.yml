@@ -1,0 +1,139 @@
+services:
+  profile-sync:
+    image: python:3.11-slim
+    working_dir: /challenge
+    volumes: ["./challenges/profile-sync:/challenge:ro"]
+    command: python app.py
+    environment:
+      FLAG: ${PROFILE_FLAG:-}
+    networks: [profile-net]
+  tenant-ledger:
+    image: python:3.11-slim
+    working_dir: /challenge
+    volumes: ["./challenges/tenant-ledger:/challenge:ro"]
+    command: python app.py
+    environment:
+      FLAG: ${LEDGER_FLAG:-}
+    networks: [ledger-net]
+  hookrelay:
+    image: python:3.11-slim
+    working_dir: /challenge
+    volumes: ["./challenges/hookrelay:/challenge:ro"]
+    command: python app.py
+    environment:
+      PARTNER_HOSTPORT: hooks.partner.test:4106
+    networks: [hook-net]
+  token-forge:
+    image: python:3.11-slim
+    working_dir: /challenge
+    volumes: ["./challenges/token-forge:/challenge:ro"]
+    command: python app.py
+    environment:
+      FLAG: ${TOKENFORGE_FLAG:-}
+    networks: [token-net]
+  cipherworks:
+    image: python:3.11-slim
+    working_dir: /challenge
+    volumes: ["./challenges/common-modulus:/challenge:ro"]
+    command: python app.py
+    environment:
+      FLAG: ${CIPHERWORKS_FLAG:-}
+    networks: [crypto-net]
+  hook-partner:
+    image: python:3.11-slim
+    working_dir: /challenge
+    volumes: ["./challenges/hookrelay/partner:/challenge:ro"]
+    command: python app.py
+    environment:
+      OPS_HOSTPORT: ops-vault:4110
+    expose: ["4106"]
+    networks:
+      hook-net:
+        aliases: [hooks.partner.test]
+    cap_drop: [ALL]
+  ops-vault:
+    image: python:3.11-slim
+    working_dir: /challenge
+    volumes: ["./challenges/hookrelay/ops:/challenge:ro"]
+    command: python app.py
+    environment:
+      FLAG: ${HOOKRELAY_FLAG:-}
+    expose: ["4110"]
+    networks: [hook-net]
+    cap_drop: [ALL]
+  profile-ingress:
+    image: python:3.11-slim
+    working_dir: /challenge
+    command: python app.py
+    volumes: ["./challenges/ingress:/challenge:ro"]
+    environment:
+      UPSTREAM_HOST: profile-sync
+      UPSTREAM_PORT: "4101"
+    ports: ["127.0.0.1:4101:8080"]
+    depends_on: [profile-sync]
+    networks: [profile-net, profile-egress]
+    cap_drop: [ALL]
+  ledger-ingress:
+    image: python:3.11-slim
+    working_dir: /challenge
+    command: python app.py
+    volumes: ["./challenges/ingress:/challenge:ro"]
+    environment:
+      UPSTREAM_HOST: tenant-ledger
+      UPSTREAM_PORT: "4102"
+    ports: ["127.0.0.1:4102:8080"]
+    depends_on: [tenant-ledger]
+    networks: [ledger-net, ledger-egress]
+    cap_drop: [ALL]
+  hookrelay-ingress:
+    image: python:3.11-slim
+    working_dir: /challenge
+    command: python app.py
+    volumes: ["./challenges/ingress:/challenge:ro"]
+    environment:
+      UPSTREAM_HOST: hookrelay
+      UPSTREAM_PORT: "4103"
+    ports: ["127.0.0.1:4103:8080"]
+    depends_on: [hookrelay]
+    networks: [hook-net, hook-egress]
+    cap_drop: [ALL]
+  tokenforge-ingress:
+    image: python:3.11-slim
+    working_dir: /challenge
+    command: python app.py
+    volumes: ["./challenges/ingress:/challenge:ro"]
+    environment:
+      UPSTREAM_HOST: token-forge
+      UPSTREAM_PORT: "4104"
+    ports: ["127.0.0.1:4104:8080"]
+    depends_on: [token-forge]
+    networks: [token-net, token-egress]
+    cap_drop: [ALL]
+  cipherworks-ingress:
+    image: python:3.11-slim
+    working_dir: /challenge
+    command: python app.py
+    volumes: ["./challenges/ingress:/challenge:ro"]
+    environment:
+      UPSTREAM_HOST: cipherworks
+      UPSTREAM_PORT: "4105"
+    ports: ["127.0.0.1:4105:8080"]
+    depends_on: [cipherworks]
+    networks: [crypto-net, crypto-egress]
+    cap_drop: [ALL]
+networks:
+  profile-net:
+    internal: true
+  ledger-net:
+    internal: true
+  hook-net:
+    internal: true
+  token-net:
+    internal: true
+  crypto-net:
+    internal: true
+  profile-egress: {}
+  ledger-egress: {}
+  hook-egress: {}
+  token-egress: {}
+  crypto-egress: {}

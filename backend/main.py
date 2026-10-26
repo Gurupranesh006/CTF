@@ -1,8 +1,8 @@
 from fastapi import FastAPI, HTTPException, Depends, status, Form, File, UploadFile
 from fastapi.responses import FileResponse
 import os
-import shutil
 import json
+import re
 import uuid
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -13,21 +13,29 @@ from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordBearer
 
 from database import init_db, get_db
+from seed_challenges import seed_challenges
 
 app = FastAPI()
+cors_origins = [origin.strip() for origin in os.getenv("CORS_ALLOWED_ORIGINS", "*").split(",") if origin.strip()]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=cors_origins,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-os.makedirs("uploads", exist_ok=True)
+UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+MAX_CHALLENGE_FILE_BYTES = 25 * 1024 * 1024
+MAX_CHALLENGE_UPLOAD_BYTES = 50 * 1024 * 1024
+MAX_CHALLENGE_FILES = 5
 
-SECRET_KEY = "super_secret_ctf_key"
+SECRET_KEY = os.getenv("SECRET_KEY", "super_secret_ctf_key")
 ALGORITHM = "HS256"
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD") or (None if os.getenv("RENDER") else "rvce@best")
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/login")
@@ -61,6 +69,7 @@ def get_admin_user(user: dict = Depends(get_current_user)):
 @app.on_event("startup")
 def startup():
     init_db()
+    seed_challenges()
 
 # --- Schemas ---
 class LoginRequest(BaseModel):
@@ -77,6 +86,10 @@ class ChallengeCreate(BaseModel):
     flag: str
     trim_spaces: bool
     ignore_case: bool
+    category: str = "web"
+    difficulty: str = "hard"
+    target_url: Optional[str] = None
+    reference_url: Optional[str] = None
 
 class ChallengeUpdate(BaseModel):
     title: Optional[str] = None
@@ -85,6 +98,10 @@ class ChallengeUpdate(BaseModel):
     flag: Optional[str] = None
     trim_spaces: Optional[bool] = None
     ignore_case: Optional[bool] = None
+    category: Optional[str] = None
+    difficulty: Optional[str] = None
+    target_url: Optional[str] = None
+    reference_url: Optional[str] = None
 
 class FlagSubmit(BaseModel):
     flag: str
@@ -97,26 +114,40 @@ class ContestStateUpdate(BaseModel):
 
 @app.post("/api/admin/login")
 def admin_login(req: LoginRequest):
-    if req.username == "admin" and req.password == "rvce@best":
-        token = create_access_token({"sub": "admin", "role": "admin"})
+    if ADMIN_PASSWORD and req.username == ADMIN_USERNAME and req.password == ADMIN_PASSWORD:
+        token = create_access_token({"sub": ADMIN_USERNAME, "role": "admin"})
         return {"access_token": token, "role": "admin"}
     raise HTTPException(status_code=401, detail="Invalid credentials")
 
 @app.post("/api/student/login")
 def student_login(req: StudentJoinRequest):
+    req_username = req.username.strip()
+    if not req_username:
+        raise HTTPException(status_code=400, detail="Username cannot be empty")
+
     with get_db() as db:
         cursor = db.cursor()
-        cursor.execute("SELECT * FROM user WHERE username = ?", (req.username,))
+        cursor.execute("SELECT * FROM user WHERE username = ?", (req_username,))
         user = cursor.fetchone()
         
-        if user:
-            raise HTTPException(status_code=400, detail="Username already exists. Please use another.")
+        is_returning = False
+        if not user:
+            cursor.execute("INSERT INTO user (username, password) VALUES (?, ?)", (req_username, ""))
+            db.commit()
+        else:
+            is_returning = True
             
-        cursor.execute("INSERT INTO user (username, password) VALUES (?, ?)", (req.username, ""))
-        db.commit()
-        
-        token = create_access_token({"sub": req.username, "role": "student"})
-        return {"access_token": token, "role": "student"}
+        token = create_access_token({"sub": req_username, "role": "student"})
+        return {"access_token": token, "role": "student", "is_returning": is_returning}
+
+@app.get("/api/users/present")
+def get_present_users():
+    """Get list of all already registered student usernames."""
+    with get_db() as db:
+        cursor = db.cursor()
+        cursor.execute("SELECT username FROM user ORDER BY username COLLATE NOCASE ASC")
+        users = [row["username"] for row in cursor.fetchall()]
+        return {"users": users}
 
 @app.get("/api/contest/state")
 def get_contest_state():
@@ -194,36 +225,89 @@ def create_challenge(
     flag: str = Form(...),
     trim_spaces: bool = Form(...),
     ignore_case: bool = Form(...),
+    category: str = Form("web"),
+    difficulty: str = Form("hard"),
+    target_url: Optional[str] = Form(None),
+    reference_url: Optional[str] = Form(None),
     files: List[UploadFile] = File(default=[]),
     _: dict = Depends(get_admin_user)
 ):
-    saved_files = []
+    if len(files) > MAX_CHALLENGE_FILES:
+        raise HTTPException(status_code=413, detail=f"You can attach up to {MAX_CHALLENGE_FILES} files")
+
+    prepared_files = []
+    total_bytes = 0
     for f in files:
         if f.filename:
-            unique_name = f"{uuid.uuid4().hex}_{f.filename}"
-            fpath = os.path.join("uploads", unique_name)
-            with open(fpath, "wb") as buffer:
-                shutil.copyfileobj(f.file, buffer)
-            saved_files.append({"original": f.filename, "stored": unique_name})
+            original_name = os.path.basename(f.filename.replace("\\", "/"))
+            safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", original_name).strip("._") or "challenge-file"
+            content = f.file.read(MAX_CHALLENGE_FILE_BYTES + 1)
+            if len(content) > MAX_CHALLENGE_FILE_BYTES:
+                raise HTTPException(status_code=413, detail=f"{safe_name} exceeds the 25 MB per-file limit")
+            total_bytes += len(content)
+            if total_bytes > MAX_CHALLENGE_UPLOAD_BYTES:
+                raise HTTPException(status_code=413, detail="The combined upload cannot exceed 50 MB")
+            prepared_files.append((safe_name, content))
+
+    saved_files = []
+    created_paths = []
+    for safe_name, content in prepared_files:
+        unique_name = f"{uuid.uuid4().hex}_{safe_name}"
+        fpath = os.path.join(UPLOAD_DIR, unique_name)
+        with open(fpath, "wb") as buffer:
+            buffer.write(content)
+        created_paths.append(fpath)
+        saved_files.append({"original": safe_name, "stored": unique_name})
     
     file_data = json.dumps(saved_files) if saved_files else None
             
     with get_db() as db:
         cursor = db.cursor()
         cursor.execute('''
-        INSERT INTO challenge (title, description, points, flag, trim_spaces, ignore_case, file_path)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (title, description, points, flag, trim_spaces, ignore_case, file_data))
-        db.commit()
-        return {"message": "Challenge created"}
+        INSERT INTO challenge
+        (title, description, points, flag, trim_spaces, ignore_case, file_path,
+         category, difficulty, target_url, reference_url)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            title, description, points, flag, trim_spaces, ignore_case, file_data,
+            category, difficulty, target_url, reference_url
+        ))
+        try:
+            db.commit()
+        except Exception:
+            for fpath in created_paths:
+                try:
+                    os.remove(fpath)
+                except OSError:
+                    pass
+            raise
+        return {"message": "Challenge created", "files": saved_files}
 
 @app.get("/api/files/{filename:path}")
 def download_file(filename: str):
-    fpath = os.path.join("uploads", filename)
-    if not os.path.exists(fpath):
+    safe_filename = os.path.basename(filename)
+    upload_root = os.path.realpath(UPLOAD_DIR)
+    fpath = os.path.realpath(os.path.join(upload_root, safe_filename))
+    if safe_filename != filename or os.path.commonpath((upload_root, fpath)) != upload_root or not os.path.isfile(fpath):
+        raise HTTPException(status_code=404, detail="File not found")
+    with get_db() as db:
+        cursor = db.cursor()
+        cursor.execute("SELECT file_path FROM challenge WHERE file_path IS NOT NULL")
+        referenced = False
+        for row in cursor.fetchall():
+            try:
+                entries = json.loads(row["file_path"])
+                if isinstance(entries, list) and any(item.get("stored") == safe_filename for item in entries if isinstance(item, dict)):
+                    referenced = True
+                    break
+            except (json.JSONDecodeError, TypeError):
+                if os.path.basename(row["file_path"]) == safe_filename:
+                    referenced = True
+                    break
+    if not referenced:
         raise HTTPException(status_code=404, detail="File not found")
     # For UUID-prefixed files, strip the prefix for the download name
-    display_name = filename.split("_", 1)[1] if "_" in filename and len(filename.split("_", 1)[0]) == 32 else filename
+    display_name = safe_filename.split("_", 1)[1] if "_" in safe_filename and len(safe_filename.split("_", 1)[0]) == 32 else safe_filename
     return FileResponse(fpath, filename=display_name)
 
 @app.put("/api/admin/challenges/{challenge_id}")
@@ -351,18 +435,19 @@ def override_submission(submission_id: int, req: SubmissionOverride, _: dict = D
 def get_leaderboard():
     with get_db() as db:
         cursor = db.cursor()
-        # Calculate points for each user based on correct submissions
+        # Award each challenge's points once on its first accepted submission.
         query = '''
-        SELECT u.username, 
-               SUM(MAX(0, c.points - 5 * (
-                   SELECT COUNT(*) FROM submission s2 
-                   WHERE s2.user_id = u.id AND s2.challenge_id = c.id AND s2.is_correct = 0 AND s2.timestamp < s.timestamp
-               ))) as score, 
-               MAX(s.timestamp) as last_submission
+        SELECT u.username,
+               SUM(c.points) as score,
+               MAX(s.first_solve) as last_submission
         FROM user u
-        JOIN submission s ON u.id = s.user_id
+        JOIN (
+            SELECT user_id, challenge_id, MIN(timestamp) as first_solve
+            FROM submission
+            WHERE is_correct = 1
+            GROUP BY user_id, challenge_id
+        ) s ON u.id = s.user_id
         JOIN challenge c ON s.challenge_id = c.id
-        WHERE s.is_correct = 1
         GROUP BY u.id
         ORDER BY score DESC, last_submission ASC
         '''
@@ -386,3 +471,32 @@ def clear_users(_: dict = Depends(get_admin_user)):
         cursor.execute("DELETE FROM user")
         db.commit()
         return {"message": "All users and submissions cleared"}
+
+@app.get("/api/admin/users")
+def get_admin_users(_: dict = Depends(get_admin_user)):
+    """List student accounts and their submission counts for user management."""
+    with get_db() as db:
+        cursor = db.cursor()
+        cursor.execute('''
+            SELECT u.id, u.username, COUNT(s.id) AS submission_count
+            FROM user u
+            LEFT JOIN submission s ON s.user_id = u.id
+            GROUP BY u.id, u.username
+            ORDER BY u.username COLLATE NOCASE ASC
+        ''')
+        return [dict(row) for row in cursor.fetchall()]
+
+@app.delete("/api/admin/users/{user_id}")
+def delete_user(user_id: int, _: dict = Depends(get_admin_user)):
+    """Delete one student and their submissions."""
+    with get_db() as db:
+        cursor = db.cursor()
+        cursor.execute("SELECT id, username FROM user WHERE id = ?", (user_id,))
+        user = cursor.fetchone()
+        if not user:
+            raise HTTPException(status_code=404, detail="Student not found")
+
+        cursor.execute("DELETE FROM submission WHERE user_id = ?", (user_id,))
+        cursor.execute("DELETE FROM user WHERE id = ?", (user_id,))
+        db.commit()
+        return {"message": "Student and submissions deleted", "username": user["username"]}

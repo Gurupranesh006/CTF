@@ -114,8 +114,7 @@ export default function Dashboard() {
           fetchChallenges();
           fetchScore();
         } else {
-          setMessage({ ...message, [challengeId]: { text: "Incorrect Flag. -5 pts penalty!", error: true } });
-          fetchScore();
+          setMessage({ ...message, [challengeId]: { text: "Incorrect flag. Try again.", error: true } });
         }
       } else {
         const data = await res.json();
@@ -165,15 +164,20 @@ export default function Dashboard() {
               <h2 style={{ margin: 0 }}>Active Challenges</h2>
               <div className="score-display">SCORE : {userScore}</div>
             </div>
-            <p style={{ color: "var(--error-color)", marginBottom: "2rem", fontStyle: "normal", fontWeight: 300, fontSize: "1.3rem" }}>
-              ⚠ Every wrong submission deducts 5 points from the potential points of that challenge!
-            </p>
             <div className="grid">
               {challenges.map((c: any) => (
                 <div key={c.id} className="card hover-glow" style={c.solved ? { borderColor: "var(--text-color)", boxShadow: "0 0 10px rgba(51,255,51,0.2)" } : {}}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
                     <h3 style={{ margin: 0 }}>{c.title}</h3>
-                    <span className="badge badge-active">{c.points} pts max</span>
+                    <span className="badge badge-active">{c.points} pts · {c.difficulty || "Hard"}</span>
+                  </div>
+                  <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "1rem" }}>
+                    <span className="badge badge-inactive">{c.category || "Web Security"}</span>
+                    {c.target_url && (
+                      <Link href={`/challenges/${c.id}`} className="badge badge-active">
+                        Enter challenge →
+                      </Link>
+                    )}
                   </div>
                   <p style={{ marginBottom: "1.5rem" }}>{c.description}</p>
                   

@@ -1,0 +1,203 @@
+services:
+  - type: web
+    name: ctf-platform-api
+    runtime: python
+    region: oregon
+    plan: 0.5c-512mb
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/contest/state
+    disk:
+      name: ctf-platform-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: DB_PATH
+        value: /var/data/ctf.db
+      - key: UPLOAD_DIR
+        value: /var/data/uploads
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ADMIN_USERNAME
+        value: admin
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: PROFILE_FLAG
+        generateValue: true
+      - key: LEDGER_FLAG
+        generateValue: true
+      - key: HOOKRELAY_FLAG
+        generateValue: true
+      - key: TOKENFORGE_FLAG
+        generateValue: true
+      - key: CIPHERWORKS_FLAG
+        generateValue: true
+      - key: PROFILE_URL
+        fromService:
+          name: ctf-profile-sync
+          type: web
+          envVarKey: CHALLENGE_PUBLIC_URL
+      - key: LEDGER_URL
+        fromService:
+          name: ctf-tenant-ledger
+          type: web
+          envVarKey: CHALLENGE_PUBLIC_URL
+      - key: HOOKRELAY_URL
+        fromService:
+          name: ctf-hookrelay
+          type: web
+          envVarKey: CHALLENGE_PUBLIC_URL
+      - key: TOKENFORGE_URL
+        fromService:
+          name: ctf-token-forge
+          type: web
+          envVarKey: CHALLENGE_PUBLIC_URL
+      - key: CIPHERWORKS_URL
+        fromService:
+          name: ctf-cipherworks
+          type: web
+          envVarKey: CHALLENGE_PUBLIC_URL
+
+  - type: web
+    name: ctf-profile-sync
+    runtime: python
+    region: oregon
+    plan: free
+    rootDir: challenges/profile-sync
+    buildCommand: "true"
+    startCommand: python app.py
+    healthCheckPath: /
+    envVars:
+      - key: CHALLENGE_PUBLIC_URL
+        fromService:
+          name: ctf-profile-sync
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: FLAG
+        fromService:
+          name: ctf-platform-api
+          type: web
+          envVarKey: PROFILE_FLAG
+
+  - type: web
+    name: ctf-tenant-ledger
+    runtime: python
+    region: oregon
+    plan: free
+    rootDir: challenges/tenant-ledger
+    buildCommand: "true"
+    startCommand: python app.py
+    healthCheckPath: /
+    envVars:
+      - key: CHALLENGE_PUBLIC_URL
+        fromService:
+          name: ctf-tenant-ledger
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: FLAG
+        fromService:
+          name: ctf-platform-api
+          type: web
+          envVarKey: LEDGER_FLAG
+
+  - type: web
+    name: ctf-hookrelay
+    runtime: python
+    region: oregon
+    plan: free
+    rootDir: challenges/hookrelay
+    buildCommand: "true"
+    startCommand: python app.py
+    healthCheckPath: /
+    envVars:
+      - key: CHALLENGE_PUBLIC_URL
+        fromService:
+          name: ctf-hookrelay
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: PARTNER_HOSTPORT
+        fromService:
+          name: ctf-hook-partner
+          type: pserv
+          property: hostport
+
+  - type: web
+    name: ctf-token-forge
+    runtime: python
+    region: oregon
+    plan: free
+    rootDir: challenges/token-forge
+    buildCommand: "true"
+    startCommand: python app.py
+    healthCheckPath: /
+    envVars:
+      - key: CHALLENGE_PUBLIC_URL
+        fromService:
+          name: ctf-token-forge
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: FLAG
+        fromService:
+          name: ctf-platform-api
+          type: web
+          envVarKey: TOKENFORGE_FLAG
+
+  - type: web
+    name: ctf-cipherworks
+    runtime: python
+    region: oregon
+    plan: free
+    rootDir: challenges/common-modulus
+    buildCommand: "true"
+    startCommand: python app.py
+    healthCheckPath: /
+    envVars:
+      - key: CHALLENGE_PUBLIC_URL
+        fromService:
+          name: ctf-cipherworks
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: FLAG
+        fromService:
+          name: ctf-platform-api
+          type: web
+          envVarKey: CIPHERWORKS_FLAG
+
+  - type: pserv
+    name: ctf-hook-partner
+    runtime: python
+    region: oregon
+    plan: 0.5c-512mb
+    rootDir: challenges/hookrelay/partner
+    buildCommand: "true"
+    startCommand: python app.py
+    envVars:
+      - key: PORT
+        value: "4106"
+      - key: OPS_HOSTPORT
+        fromService:
+          name: ctf-ops-vault
+          type: pserv
+          property: hostport
+
+  - type: pserv
+    name: ctf-ops-vault
+    runtime: python
+    region: oregon
+    plan: 0.5c-512mb
+    rootDir: challenges/hookrelay/ops
+    buildCommand: "true"
+    startCommand: python app.py
+    envVars:
+      - key: PORT
+        value: "4110"
+      - key: FLAG
+        fromService:
+          name: ctf-platform-api
+          type: web
+          envVarKey: HOOKRELAY_FLAG

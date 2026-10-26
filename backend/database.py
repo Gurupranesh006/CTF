@@ -1,9 +1,13 @@
 import sqlite3
+import os
 from contextlib import contextmanager
 
-DB_NAME = "ctf.db"
+DB_NAME = os.getenv("DB_PATH", "ctf.db")
 
 def init_db():
+    parent = os.path.dirname(DB_NAME)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     
@@ -40,9 +44,24 @@ def init_db():
         flag TEXT NOT NULL,
         trim_spaces BOOLEAN NOT NULL DEFAULT 0,
         ignore_case BOOLEAN NOT NULL DEFAULT 0,
-        file_path TEXT
+        file_path TEXT,
+        category TEXT NOT NULL DEFAULT 'web',
+        difficulty TEXT NOT NULL DEFAULT 'hard',
+        target_url TEXT,
+        reference_url TEXT
     )
     ''')
+
+    for column, definition in (
+        ("category", "TEXT NOT NULL DEFAULT 'web'"),
+        ("difficulty", "TEXT NOT NULL DEFAULT 'hard'"),
+        ("target_url", "TEXT"),
+        ("reference_url", "TEXT"),
+    ):
+        try:
+            cursor.execute(f"ALTER TABLE challenge ADD COLUMN {column} {definition}")
+        except sqlite3.OperationalError:
+            pass
     
     # Submissions
     cursor.execute('''
