@@ -129,10 +129,8 @@ export default function AdminDashboard() {
 
   const addChallenge = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isActive) {
-      setError("Cannot add challenges while contest is active.");
-      return;
-    }
+    setError("");
+    setSuccess("");
     if (selectedFile && selectedFile.length > 5) {
       setError("Attach no more than 5 files to a challenge.");
       return;
@@ -160,41 +158,38 @@ export default function AdminDashboard() {
       }
     }
 
-    const res = await fetch(`${API_BASE_URL}/api/admin/challenges`, {
-      method: "POST",
-      headers: { 
-        Authorization: `Bearer ${token}`
-      },
-      body: formData
-    });
-    if (res.ok) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/challenges`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData
+      });
+      if (!res.ok) throw new Error(await responseError(res, "Failed to add challenge"));
       setNewChallenge({ title: "", description: "", points: 100, flag: "", trim_spaces: false, ignore_case: false });
       setSelectedFile(null);
       setFileInputKey((key) => key + 1);
-      fetchChallenges();
-      setError("");
-    } else {
-      const data = await res.json();
-      let errorMsg = "Failed to add challenge";
-      if (data.detail) {
-        if (typeof data.detail === "string") errorMsg = data.detail;
-        else if (Array.isArray(data.detail)) errorMsg = data.detail[0].msg;
-      }
-      setError(errorMsg);
+      await fetchChallenges();
+      setSuccess("Challenge added.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : `Could not reach the API at ${API_BASE_URL}.`);
     }
   };
 
   const deleteChallenge = async (id: number) => {
-    if (isActive) {
-      setError("Cannot delete challenges while contest is active.");
-      return;
+    setError("");
+    setSuccess("");
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_BASE_URL}/api/admin/challenges/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error(await responseError(res, "Failed to delete challenge"));
+      await fetchChallenges();
+      setSuccess("Challenge deleted.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : `Could not reach the API at ${API_BASE_URL}.`);
     }
-    const token = localStorage.getItem("token");
-    await fetch(`${API_BASE_URL}/api/admin/challenges/${id}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    fetchChallenges();
   };
 
   const clearLeaderboard = async () => {
@@ -481,12 +476,12 @@ export default function AdminDashboard() {
           <div className="card">
             <h3>Add Challenge</h3>
             <form onSubmit={addChallenge}>
-              <input type="text" placeholder="Title" value={newChallenge.title} onChange={e => setNewChallenge({...newChallenge, title: e.target.value})} required disabled={isActive} />
-              <textarea placeholder="Description" rows={3} value={newChallenge.description} onChange={e => setNewChallenge({...newChallenge, description: e.target.value})} required disabled={isActive}></textarea>
-              <input type="number" placeholder="Points" value={newChallenge.points} onChange={e => setNewChallenge({...newChallenge, points: parseInt(e.target.value)})} required disabled={isActive} />
-              <input type="text" placeholder="Flag (e.g. CTF{secret})" value={newChallenge.flag} onChange={e => setNewChallenge({...newChallenge, flag: e.target.value})} required disabled={isActive} />
+              <input type="text" placeholder="Title" value={newChallenge.title} onChange={e => setNewChallenge({...newChallenge, title: e.target.value})} required />
+              <textarea placeholder="Description" rows={3} value={newChallenge.description} onChange={e => setNewChallenge({...newChallenge, description: e.target.value})} required></textarea>
+              <input type="number" placeholder="Points" value={newChallenge.points} onChange={e => setNewChallenge({...newChallenge, points: parseInt(e.target.value)})} required />
+              <input type="text" placeholder="Flag (e.g. CTF{secret})" value={newChallenge.flag} onChange={e => setNewChallenge({...newChallenge, flag: e.target.value})} required />
               <label htmlFor="challenge-files" style={{ display: "block", marginBottom: "0.4rem" }}>Downloadable challenge files (optional)</label>
-              <input key={fileInputKey} id="challenge-files" type="file" multiple onChange={e => setSelectedFile(e.target.files)} disabled={isActive} style={{ padding: "0.5rem", background: "rgba(0,0,0,0.5)" }} />
+              <input key={fileInputKey} id="challenge-files" type="file" multiple onChange={e => setSelectedFile(e.target.files)} style={{ padding: "0.5rem", background: "rgba(0,0,0,0.5)" }} />
               <p style={{ margin: "0.25rem 0 1rem", fontSize: "0.8rem", color: "var(--text-dim)" }}>Attach up to 5 files, 25 MB each. Participants can download them from the challenge card.</p>
               {selectedFile && selectedFile.length > 0 && (
                 <ul aria-label="Selected challenge files" style={{ margin: "0 0 1rem", paddingLeft: "1.25rem", fontSize: "0.85rem", color: "var(--text-color)" }}>
@@ -495,16 +490,16 @@ export default function AdminDashboard() {
               )}
               
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem" }}>
-                <input type="checkbox" id="trim" checked={newChallenge.trim_spaces} onChange={e => setNewChallenge({...newChallenge, trim_spaces: e.target.checked})} style={{ width: "auto", margin: 0 }} disabled={isActive} />
+                <input type="checkbox" id="trim" checked={newChallenge.trim_spaces} onChange={e => setNewChallenge({...newChallenge, trim_spaces: e.target.checked})} style={{ width: "auto", margin: 0 }} />
                 <label htmlFor="trim">Trim all spaces</label>
               </div>
               
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem" }}>
-                <input type="checkbox" id="ignore" checked={newChallenge.ignore_case} onChange={e => setNewChallenge({...newChallenge, ignore_case: e.target.checked})} style={{ width: "auto", margin: 0 }} disabled={isActive} />
+                <input type="checkbox" id="ignore" checked={newChallenge.ignore_case} onChange={e => setNewChallenge({...newChallenge, ignore_case: e.target.checked})} style={{ width: "auto", margin: 0 }} />
                 <label htmlFor="ignore">Ignore Case</label>
               </div>
               
-              <button type="submit" disabled={isActive} style={{ width: "100%" }}>Add Challenge</button>
+              <button type="submit" style={{ width: "100%" }}>Add Challenge</button>
             </form>
           </div>
 
@@ -515,7 +510,7 @@ export default function AdminDashboard() {
                 <div key={c.id} className="card" style={{ padding: "1rem" }}>
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <h4>{c.title} ({c.points} pts)</h4>
-                    <button onClick={() => deleteChallenge(c.id)} disabled={isActive} style={{ padding: "0.2rem 0.5rem", borderColor: "var(--error-color)", color: "var(--error-color)" }}>X</button>
+                    <button onClick={() => deleteChallenge(c.id)} style={{ padding: "0.2rem 0.5rem", borderColor: "var(--error-color)", color: "var(--error-color)" }}>X</button>
                   </div>
                   <p style={{ fontSize: "0.9rem", color: "#aaa" }}>{c.description}</p>
                   {c.file_path && (() => {
