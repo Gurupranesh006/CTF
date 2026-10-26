@@ -38,30 +38,15 @@ services:
       - key: CIPHERWORKS_FLAG
         generateValue: true
       - key: PROFILE_URL
-        fromService:
-          name: ctf-profile-sync
-          type: web
-          envVarKey: CHALLENGE_PUBLIC_URL
+        value: https://ctf-profile-sync.onrender.com
       - key: LEDGER_URL
-        fromService:
-          name: ctf-tenant-ledger
-          type: web
-          envVarKey: CHALLENGE_PUBLIC_URL
+        value: https://ctf-tenant-ledger.onrender.com
       - key: HOOKRELAY_URL
-        fromService:
-          name: ctf-hookrelay
-          type: web
-          envVarKey: CHALLENGE_PUBLIC_URL
+        value: https://ctf-hookrelay.onrender.com
       - key: TOKENFORGE_URL
-        fromService:
-          name: ctf-token-forge
-          type: web
-          envVarKey: CHALLENGE_PUBLIC_URL
+        value: https://ctf-token-forge.onrender.com
       - key: CIPHERWORKS_URL
-        fromService:
-          name: ctf-cipherworks
-          type: web
-          envVarKey: CHALLENGE_PUBLIC_URL
+        value: https://ctf-cipherworks.onrender.com
 
   - type: web
     name: ctf-profile-sync
@@ -73,11 +58,6 @@ services:
     startCommand: python app.py
     healthCheckPath: /
     envVars:
-      - key: CHALLENGE_PUBLIC_URL
-        fromService:
-          name: ctf-profile-sync
-          type: web
-          envVarKey: RENDER_EXTERNAL_URL
       - key: FLAG
         fromService:
           name: ctf-platform-api
@@ -94,11 +74,6 @@ services:
     startCommand: python app.py
     healthCheckPath: /
     envVars:
-      - key: CHALLENGE_PUBLIC_URL
-        fromService:
-          name: ctf-tenant-ledger
-          type: web
-          envVarKey: RENDER_EXTERNAL_URL
       - key: FLAG
         fromService:
           name: ctf-platform-api
@@ -115,11 +90,6 @@ services:
     startCommand: python app.py
     healthCheckPath: /
     envVars:
-      - key: CHALLENGE_PUBLIC_URL
-        fromService:
-          name: ctf-hookrelay
-          type: web
-          envVarKey: RENDER_EXTERNAL_URL
       - key: PARTNER_HOSTPORT
         fromService:
           name: ctf-hook-partner
@@ -136,11 +106,6 @@ services:
     startCommand: python app.py
     healthCheckPath: /
     envVars:
-      - key: CHALLENGE_PUBLIC_URL
-        fromService:
-          name: ctf-token-forge
-          type: web
-          envVarKey: RENDER_EXTERNAL_URL
       - key: FLAG
         fromService:
           name: ctf-platform-api
@@ -157,11 +122,6 @@ services:
     startCommand: python app.py
     healthCheckPath: /
     envVars:
-      - key: CHALLENGE_PUBLIC_URL
-        fromService:
-          name: ctf-cipherworks
-          type: web
-          envVarKey: RENDER_EXTERNAL_URL
       - key: FLAG
         fromService:
           name: ctf-platform-api

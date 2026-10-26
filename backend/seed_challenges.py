@@ -108,7 +108,7 @@ def seed_challenges():
                        VALUES (?, ?, ?, ?, 0, 0, NULL, ?, ?, ?, ?)""",
                     (challenge["title"], challenge["description"], challenge["points"], challenge["flag"],
                      challenge["category"], challenge["difficulty"], challenge["target_url"],
-                     challenge["reference_url"]),
+                     challenge.get("reference_url")),
                 )
         db.commit()
     finally:
